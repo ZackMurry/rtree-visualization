@@ -33,10 +33,10 @@ class RTreeEntry<T> {
 // todo: convert ints to doubles
 public class RTree<T> {
 
-    public static final int MIN_ENTRIES = 4;
-    public static final int MAX_ENTRIES = 10;
+    public static final int MIN_ENTRIES = 2;
+    public static final int MAX_ENTRIES = 4;
 
-    Rectangle bounds;
+    Rectangle bounds = new Rectangle(0, 0, 0, 0);
     List<RTree<T>> children = new ArrayList<>();
     List<RTreeEntry<T>> entries = new ArrayList<>();
     RTree<T> parent;
@@ -81,10 +81,12 @@ public class RTree<T> {
         }
         if (l.entries.size() < MAX_ENTRIES) {
             l.entries.add(new RTreeEntry<>(bounds, value));
+            l.bounds = findSmallestBoundingRect(l.bounds, l.entries.get(l.entries.size() - 1).bounds);
         } else {
             l.entries.add(new RTreeEntry<>(bounds, value));
             var result = quadraticSplit(l.entries);
             result.get(0).parent = l;
+//            result.get(1).parent = l;
             l = result.get(0);
             ll = result.get(1);
         }
@@ -104,6 +106,8 @@ public class RTree<T> {
             if (nn != null) {
                 if (p.children.size() < MAX_ENTRIES) {
                     p.children.add(nn);
+                    p.bounds = findSmallestBoundingRect(p.bounds, nn.bounds);
+                    nn.parent = p;
                     n = p;
                     nn = null;
                 } else {
@@ -125,6 +129,7 @@ public class RTree<T> {
                 bounds = findSmallestBoundingRect(children.get(0).bounds, children.get(1).bounds);
             } else {
                 children.add(nn);
+                bounds = findSmallestBoundingRect(bounds, children.get(children.size() - 1).bounds);
             }
         }
     }
@@ -144,12 +149,18 @@ public class RTree<T> {
         result.get(1).bounds = new Rectangle(result.get(1).children.get(0).bounds.x, result.get(1).children.get(0).bounds.y, result.get(1).children.get(0).bounds.width, result.get(1).children.get(0).bounds.height);
         while (!e.isEmpty()) {
             if (MIN_ENTRIES == result.get(0).children.size() + e.size()) {
-                result.get(0).children.addAll(e);
+                for (RTree<T> child : e) {
+                    result.get(0).children.add(child);
+                    result.get(0).bounds = findSmallestBoundingRect(result.get(0).bounds, child.bounds);
+                }
                 e.clear();
                 break;
             }
             if (MIN_ENTRIES == result.get(1).children.size() + e.size()) {
-                result.get(1).children.addAll(e);
+                for (RTree<T> child : e) {
+                    result.get(1).children.add(child);
+                    result.get(1).bounds = findSmallestBoundingRect(result.get(1).bounds, child.bounds);
+                }
                 e.clear();
                 break;
             }
@@ -180,17 +191,23 @@ public class RTree<T> {
         result.add(new RTree<>());
         result.add(new RTree<>());
         result.get(0).entries.add(e.remove(seeds[0]));
-        result.get(1).entries.add(e.remove(seeds[1] - 1)); // Subtract one to adjust for index decrement from previous removal
+        result.get(1).entries.add(e.remove(seeds[1] - 1)); // Subtract one to adjust for the index decrement from the previous removal
         result.get(0).bounds = new Rectangle(result.get(0).entries.get(0).bounds.x, result.get(0).entries.get(0).bounds.y, result.get(0).entries.get(0).bounds.width, result.get(0).entries.get(0).bounds.height);
         result.get(1).bounds = new Rectangle(result.get(1).entries.get(0).bounds.x, result.get(1).entries.get(0).bounds.y, result.get(1).entries.get(0).bounds.width, result.get(1).entries.get(0).bounds.height);
         while (!e.isEmpty()) {
             if (MIN_ENTRIES == result.get(0).entries.size() + e.size()) {
-                result.get(0).entries.addAll(e);
+                for (RTreeEntry<T> entry : e) {
+                    result.get(0).entries.add(entry);
+                    result.get(0).bounds = findSmallestBoundingRect(result.get(0).bounds, entry.bounds);
+                }
                 e.clear();
                 break;
             }
             if (MIN_ENTRIES == result.get(1).entries.size() + e.size()) {
-                result.get(1).entries.addAll(e);
+                for (RTreeEntry<T> entry : e) {
+                    result.get(1).entries.add(entry);
+                    result.get(1).bounds = findSmallestBoundingRect(result.get(1).bounds, entry.bounds);
+                }
                 e.clear();
                 break;
             }
