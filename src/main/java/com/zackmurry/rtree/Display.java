@@ -1,12 +1,13 @@
 package com.zackmurry.rtree;
 
 import javax.swing.*;
-import javax.swing.event.MouseInputListener;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.awt.image.BufferStrategy;
 import java.util.ConcurrentModificationException;
+import java.util.List;
 
 public class Display extends Canvas implements Runnable {
 
@@ -21,33 +22,70 @@ public class Display extends Canvas implements Runnable {
 
     private static boolean running = false;
 
-    private final RTree<Integer> rtree = new RTree<>();
+    private final RTree<Rectangle> rtree = new RTree<>();
+    private Point dragStart = null;
+    private Rectangle searchRect = null;
+    private List<Rectangle> searchedRects = null;
 
     class ClickDetector implements MouseListener {
         @Override
         public void mouseClicked(MouseEvent mouseEvent) {
-            System.out.println("inserting at (" + mouseEvent.getX() + ", " + mouseEvent.getY() + ")");
-            rtree.insert(new Rectangle(mouseEvent.getX(), mouseEvent.getY(), 10, 20), 0);
-            System.out.println(rtree);
+            if (mouseEvent.getButton() == MouseEvent.BUTTON1) {
+                var rect = new Rectangle(mouseEvent.getX(), mouseEvent.getY(), 10, 20);
+                rtree.insert(rect, rect);
+                System.out.println(rtree);
+            } else if (mouseEvent.getButton() == MouseEvent.BUTTON3) {
+                searchRect = null;
+                dragStart = null;
+                searchedRects = null;
+            }
         }
 
         @Override
         public void mousePressed(MouseEvent mouseEvent) {
-
+            if (mouseEvent.getButton() == MouseEvent.BUTTON3) {
+                dragStart = new Point(mouseEvent.getX(), mouseEvent.getY());
+            }
         }
 
         @Override
         public void mouseReleased(MouseEvent mouseEvent) {
-
+            if (mouseEvent.getButton() == MouseEvent.BUTTON3) {
+                int x1 = Math.min(mouseEvent.getX(), dragStart.x);
+                int y1 = Math.min(mouseEvent.getY(), dragStart.y);
+                int x2 = Math.max(mouseEvent.getX(), dragStart.x);
+                int y2 = Math.max(mouseEvent.getY(), dragStart.y);
+                searchRect = new Rectangle(x1, y1, x2 - x1, y2 - y1);
+                searchedRects = rtree.search(searchRect);
+                dragStart = null;
+            }
         }
 
         @Override
         public void mouseEntered(MouseEvent mouseEvent) {
-
         }
 
         @Override
         public void mouseExited(MouseEvent mouseEvent) {
+
+        }
+    }
+
+    class DragDetector implements MouseMotionListener {
+        @Override
+        public void mouseDragged(MouseEvent mouseEvent) {
+            if (dragStart != null) {
+                int x1 = Math.min(mouseEvent.getX(), dragStart.x);
+                int y1 = Math.min(mouseEvent.getY(), dragStart.y);
+                int x2 = Math.max(mouseEvent.getX(), dragStart.x);
+                int y2 = Math.max(mouseEvent.getY(), dragStart.y);
+                searchRect = new Rectangle(x1, y1, x2 - x1, y2 - y1);
+                searchedRects = rtree.search(searchRect);
+            }
+        }
+
+        @Override
+        public void mouseMoved(MouseEvent mouseEvent) {
 
         }
     }
@@ -57,6 +95,7 @@ public class Display extends Canvas implements Runnable {
         Dimension size = new Dimension(WIDTH, HEIGHT);
         this.setPreferredSize(size);
         addMouseListener(new ClickDetector());
+        addMouseMotionListener(new DragDetector());
     }
 
     public synchronized void start() {
@@ -65,7 +104,7 @@ public class Display extends Canvas implements Runnable {
         this.thread.start();
     }
 
-    public synchronized void stop(){
+    public synchronized void stop() {
         running = false;
         try{
             this.thread.join();
@@ -81,15 +120,14 @@ public class Display extends Canvas implements Runnable {
             while(running) {
                 render();
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     private synchronized void render() {
         BufferStrategy bs = this.getBufferStrategy();
-        if(bs == null){
+        if (bs == null) {
             this.createBufferStrategy(3);
             return;
         }
@@ -113,22 +151,31 @@ public class Display extends Canvas implements Runnable {
         g.fillRect(-WIDTH, -HEIGHT, 2*WIDTH, 2*HEIGHT);
 
         drawNode(rtree, g, 0);
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.setColor(new Color(50, 204, 89));
+        g2d.setStroke(new BasicStroke(5));
+        if (searchedRects != null) {
+            for (Rectangle rect : searchedRects) {
+                g2d.drawRect(rect.x, rect.y, rect.width, rect.height);
+            }
+        }
+        g2d.setStroke(new BasicStroke(3));
+        if (searchRect != null) {
+            g2d.drawRect(searchRect.x, searchRect.y, searchRect.width, searchRect.height);
+        }
     }
 
-    private void drawNode(RTree<Integer> node, Graphics g, int depth) {
-        if (!node.children.isEmpty() && !node.entries.isEmpty()) {
-            System.out.println("Node with children and entries!!!");
-        }
+    private void drawNode(RTree<Rectangle> node, Graphics g, int depth) {
         try {
             Graphics2D g2d = (Graphics2D) g;
             g2d.setColor(new Color(Math.min(depth * 50, 255), 0, 0));
             g2d.setStroke(new BasicStroke(5));
             g2d.drawRect(node.bounds.x, node.bounds.y, node.bounds.width, node.bounds.height);
             g.setColor(new Color(30, 94, 232));
-            for (RTreeEntry<Integer> entry : node.entries) {
+            for (RTreeEntry<Rectangle> entry : node.entries) {
                 g.fillRect(entry.bounds.x, entry.bounds.y, entry.bounds.width, entry.bounds.height);
             }
-            for (RTree<Integer> child : node.children) {
+            for (RTree<Rectangle> child : node.children) {
                 drawNode(child, g, depth + 1);
             }
         } catch (ConcurrentModificationException e) {
@@ -143,17 +190,8 @@ public class Display extends Canvas implements Runnable {
         display.frame.setLayout(new GridBagLayout());
 
         JPanel mainPanel = new JPanel();
-//        JPanel sidePanel = new JPanel();
-
-//        sidePanel.setLayout(new FlowLayout(FlowLayout.CENTER, 50, 25));
-
         mainPanel.add(display);
         display.frame.add(mainPanel);
-
-//        sidePanel.setPreferredSize(new Dimension(200, Display.HEIGHT));
-
-//        display.frame.add(sidePanel);
-
         SwingUtilities.updateComponentTreeUI(display.frame);
 
         display.frame.pack();
