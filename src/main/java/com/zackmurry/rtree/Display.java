@@ -131,6 +131,7 @@ public class Display extends Canvas implements Runnable {
             this.createBufferStrategy(3);
             return;
         }
+        Toolkit.getDefaultToolkit().sync();
 
         Graphics g = bs.getDrawGraphics();
 
